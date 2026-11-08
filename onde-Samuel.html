@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Onde o Samuel vai passar hoje</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  /* ============ CONFIGURAÇÃO ============
+     Cole entre as aspas o link do seu Firebase Realtime Database.
+     Ex: const FIREBASE_URL = "https://onde-samuel-default-rtdb.firebaseio.com";
+     ====================================== */
+  const FIREBASE_URL = "https://onde-samuel-default-rtdb.firebaseio.com/";
+</script>
+<style>
+  :root{
+    --laranja:#ff7a00; --laranja-esc:#e06600; --fundo:#fff8f1;
+    --texto:#2a1a0c; --cinza:#7a6a5c; --borda:#f0dcc6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--texto);background:var(--fundo)}
+  button{font:inherit;cursor:pointer;border:none}
+  .tela{position:fixed;inset:0;display:none}
+  .tela.ativa{display:flex}
+
+  /* Tela inicial */
+  #inicio{flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;
+    background:radial-gradient(circle at 50% 20%,#ffe2c4 0,var(--fundo) 60%)}
+  .pino{width:84px;height:84px;margin-bottom:18px}
+  #inicio h1{font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.5px;max-width:340px}
+  #inicio h1 span{color:var(--laranja)}
+  #inicio p{color:var(--cinza);margin:10px 0 34px;font-size:15px}
+  .btn{display:block;width:100%;max-width:320px;padding:16px;border-radius:16px;font-size:17px;font-weight:700;margin:6px 0;transition:transform .1s}
+  .btn:active{transform:scale(.97)}
+  .btn-laranja{background:var(--laranja);color:#fff;box-shadow:0 6px 18px rgba(255,122,0,.35)}
+  .btn-claro{background:#fff;color:var(--texto);border:2px solid var(--borda)}
+
+  /* Senha */
+  #modal{position:fixed;inset:0;background:rgba(42,26,12,.45);display:none;align-items:center;justify-content:center;padding:24px;z-index:2000}
+  #modal.ativa{display:flex}
+  .caixa{background:#fff;border-radius:22px;padding:26px 22px;width:100%;max-width:330px;text-align:center}
+  .caixa h2{font-size:20px;margin-bottom:6px}
+  .caixa p{color:var(--cinza);font-size:14px;margin-bottom:16px}
+  #senha{width:100%;font-size:28px;letter-spacing:12px;text-align:center;padding:12px;border:2px solid var(--borda);border-radius:14px;outline:none}
+  #senha:focus{border-color:var(--laranja)}
+  #erroSenha{color:#d33;font-size:14px;height:20px;margin:8px 0 4px}
+  .linha-btns{display:flex;gap:10px}
+  .linha-btns .btn{margin:0}
+
+  /* Mapa */
+  #telaMapa{flex-direction:column}
+  #topo{background:#fff;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;border-bottom:1px solid var(--borda);display:flex;align-items:center;gap:10px;z-index:1000}
+  #topo .tit{flex:1;min-width:0}
+  #topo h3{font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #topo small{color:var(--cinza);font-size:12px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sair{background:#f6ece2;color:var(--texto);padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600}
+  #mapa{flex:1}
+  #painel{position:absolute;left:10px;right:10px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:1000;
+    background:#fff;border-radius:18px;padding:12px;box-shadow:0 8px 30px rgba(0,0,0,.18)}
+  #painel .dica{font-size:13px;color:var(--cinza);text-align:center;margin-bottom:10px}
+  .ferramentas{display:flex;gap:8px;margin-bottom:8px}
+  .ferr{flex:1;background:#f6ece2;border-radius:12px;padding:10px 4px;font-size:13px;font-weight:600;color:var(--texto)}
+  .ferr.ligado{background:#ffe3c7;color:var(--laranja-esc)}
+  #obs{width:100%;border:2px solid var(--borda);border-radius:12px;padding:10px;font-size:15px;margin-bottom:8px;outline:none}
+  #obs:focus{border-color:var(--laranja)}
+  #btnSalvar{width:100%;max-width:none;margin:0}
+  #cartaoVisit{position:absolute;left:10px;right:10px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:1000;
+    background:#fff;border-radius:18px;padding:14px 16px;box-shadow:0 8px 30px rgba(0,0,0,.18);display:flex;align-items:center;gap:12px}
+  #cartaoVisit .txt{flex:1;font-size:14px}
+  #cartaoVisit .txt b{display:block;font-size:15px;margin-bottom:2px}
+  #cartaoVisit .txt span{color:var(--cinza)}
+  #btnCentralizar{background:var(--laranja);color:#fff;border-radius:12px;padding:10px 12px;font-weight:700;font-size:13px;white-space:nowrap}
+  #aviso{position:absolute;top:calc(70px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:1500;
+    background:var(--texto);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90%;text-align:center}
+  #aviso.ver{opacity:1}
+  .ponto-ini,.ponto-fim{border-radius:50%;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+  .ponto-ini{background:#2bb24c}
+  .ponto-fim{background:var(--laranja-esc)}
+  .ponto-meio{background:#fff;border:3px solid var(--laranja);border-radius:50%}
+</style>
+</head>
+<body>
+
+<!-- TELA INICIAL -->
+<section id="inicio" class="tela ativa">
+  <svg class="pino" viewBox="0 0 64 64" aria-hidden="true">
+    <path d="M32 4C20.4 4 11 13.2 11 24.6 11 40 32 60 32 60s21-20 21-35.4C53 13.2 43.6 4 32 4z" fill="#ff7a00"/>
+    <circle cx="32" cy="24.5" r="8" fill="#fff"/>
+  </svg>
+  <h1>Onde o <span>Samuel</span> vai passar hoje</h1>
+  <p>Varginha · MG</p>
+  <button class="btn btn-laranja" id="btnVisitante">Entrar como visitante</button>
+  <button class="btn btn-claro" id="btnSamuel">Entrar como Samuel</button>
+</section>
+
+<!-- SENHA -->
+<div id="modal">
+  <div class="caixa">
+    <h2>Oi, Samuel 👋</h2>
+    <p>Digite sua senha</p>
+    <input id="senha" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+    <div id="erroSenha"></div>
+    <div class="linha-btns">
+      <button class="btn btn-claro" id="btnCancelar">Voltar</button>
+      <button class="btn btn-laranja" id="btnEntrar">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAPA -->
+<section id="telaMapa" class="tela">
+  <div id="topo">
+    <div class="tit">
+      <h3>Onde o Samuel vai passar hoje</h3>
+      <small id="subtitulo">Carregando…</small>
+    </div>
+    <button class="sair" id="btnSair">Sair</button>
+  </div>
+  <div id="mapa"></div>
+
+  <!-- Painel do Samuel -->
+  <div id="painel" style="display:none">
+    <div class="dica" id="dica">Toque no mapa para marcar por onde você vai passar</div>
+    <div class="ferramentas">
+      <button class="ferr ligado" id="btnRuas">🛣️ Seguir ruas</button>
+      <button class="ferr" id="btnDesfazer">↩️ Desfazer</button>
+      <button class="ferr" id="btnLimpar">🗑️ Limpar</button>
+    </div>
+    <input id="obs" type="text" maxlength="120" placeholder="Recado (opcional) — ex: saio às 14h">
+    <button class="btn btn-laranja" id="btnSalvar">Salvar trajeto para os visitantes</button>
+  </div>
+
+  <!-- Cartão do visitante -->
+  <div id="cartaoVisit" style="display:none">
+    <div class="txt"><b id="visitTitulo">Carregando trajeto…</b><span id="visitInfo"></span></div>
+    <button id="btnCentralizar">Ver trajeto</button>
+  </div>
+
+  <div id="aviso"></div>
+</section>
+
+<script>
+(function(){
+  const VARGINHA = [-21.5513, -45.4303];
+  const HASH_DEMO = "262b06d105e1c865b01c3e0a74291cdae511ef15f3d456e14fbe2dffd9efe3b9"; // só usado no modo teste, sem Firebase
+  const temNuvem = !!FIREBASE_URL;
+  const base = FIREBASE_URL.replace(/\/+$/,"");
+
+  let modo = null;          // "samuel" | "visitante"
+  let senhaDigitada = "";
+  let mapa = null, camada = null, marcadores = null;
+  let pontos = [];          // pontos tocados [[lat,lng],...]
+  let trechos = [];         // trechos entre pontos: cada um é lista de [lat,lng]
+  let seguirRuas = true;
+  let timerVisit = null;
+
+  const $ = id => document.getElementById(id);
+  function mostrar(id){ document.querySelectorAll(".tela").forEach(t=>t.classList.toggle("ativa", t.id===id)); }
+  let tAviso;
+  function aviso(msg){ const a=$("aviso"); a.textContent=msg; a.classList.add("ver"); clearTimeout(tAviso); tAviso=setTimeout(()=>a.classList.remove("ver"),2600); }
+
+  // ---------- Armazenamento (nuvem ou modo teste) ----------
+  async function lerTrajeto(){
+    if(!temNuvem){
+      try{ return JSON.parse(localStorage.getItem("trajetoSamuel")||"null"); }catch(e){ return null; }
+    }
+    const r = await fetch(base + "/trajeto.json?t=" + Date.now());
+    if(!r.ok) throw new Error("leitura " + r.status);
+    return await r.json();
+  }
+  async function salvarTrajeto(dados){
+    if(!temNuvem){
+      localStorage.setItem("trajetoSamuel", JSON.stringify(dados)); return;
+    }
+    // Grava o trajeto junto com a senha; as regras do Firebase só aceitam se a senha for a certa
+    const r = await fetch(base + "/.json", {method:"PATCH", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ trajeto: dados, chave: senhaDigitada })});
+    if(!r.ok) throw new Error("gravacao " + r.status);
+  }
+  async function conferirSenha(s){
+    if(!temNuvem){
+      try{ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+        return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("") === HASH_DEMO; }catch(e){ return false; }
+    }
+    try{
+      const r = await fetch(base + "/.json", {method:"PATCH", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ chave: s })});
+      return r.ok;
+    }catch(e){ return false; }
+  }
+
+  // ---------- Mapa ----------
+  function criarMapa(){
+    if(mapa) return;
+    mapa = L.map("mapa", {zoomControl:false, attributionControl:true}).setView(VARGINHA, 14);
+    L.control.zoom({position:"topright"}).addTo(mapa);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, subdomains:"abc",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(mapa);
+    marcadores = L.layerGroup().addTo(mapa);
+    mapa.on("click", e => { if(modo==="samuel") adicionarPonto([e.latlng.lat, e.latlng.lng]); });
+  }
+
+  function linhaCompleta(){
+    const out = [];
+    trechos.forEach(t => t.forEach((p,i)=>{ if(i===0 && out.length) return; out.push(p); }));
+    if(!trechos.length && pontos.length) out.push(pontos[0]);
+    return out;
+  }
+
+  function desenhar(linha, pts){
+    if(camada){ mapa.removeLayer(camada); camada = null; }
+    marcadores.clearLayers();
+    if(linha && linha.length > 1){
+      camada = L.layerGroup([
+        L.polyline(linha, {color:"#ffffff", weight:11, opacity:.9, lineCap:"round", lineJoin:"round"}),
+        L.polyline(linha, {color:"#ff7a00", weight:7, opacity:1, lineCap:"round", lineJoin:"round"})
+      ]).addTo(mapa);
+    }
+    const p = pts || [];
+    p.forEach((pt,i)=>{
+      const ini = i===0, fim = i===p.length-1 && p.length>1;
+      const cls = ini ? "ponto-ini" : fim ? "ponto-fim" : "ponto-meio";
+      const tam = (ini||fim) ? 20 : 12;
+      L.marker(pt, {icon:L.divIcon({className:"", html:`<div class="${cls}" style="width:${tam}px;height:${tam}px"></div>`, iconSize:[tam,tam], iconAnchor:[tam/2,tam/2]}), interactive:false})
+        .bindTooltip(ini ? "Início" : fim ? "Fim" : "", {permanent:false}).addTo(marcadores);
+    });
+  }
+
+  async function rotaPelasRuas(a, b){
+    // OSRM (roteamento gratuito do OpenStreetMap). Se falhar, usa linha reta.
+    const url = `https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`;
+    const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 8000);
+    try{
+      const r = await fetch(url, {signal:ctrl.signal});
+      const j = await r.json();
+      if(j.code==="Ok" && j.routes && j.routes[0]){
+        return j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+      }
+    }catch(e){} finally{ clearTimeout(to); }
+    aviso("Não consegui seguir a rua aqui, liguei os pontos em linha reta");
+    return [a,b];
+  }
+
+  let ocupado = false;
+  async function adicionarPonto(p){
+    if(ocupado) return;
+    if(!pontos.length){ pontos.push(p); desenhar(linhaCompleta(), pontos); atualizarDica(); return; }
+    ocupado = true;
+    const ant = pontos[pontos.length-1];
+    pontos.push(p);
+    desenhar(linhaCompleta(), pontos);
+    const trecho = seguirRuas ? await rotaPelasRuas(ant, p) : [ant, p];
+    trechos.push(trecho);
+    ocupado = false;
+    desenhar(linhaCompleta(), pontos);
+    atualizarDica();
+  }
+
+  function atualizarDica(){
+    $("dica").textContent = !pontos.length ? "Toque no mapa para marcar de onde você sai"
+      : pontos.length===1 ? "Agora toque no próximo lugar por onde vai passar"
+      : `${pontos.length} pontos marcados · continue tocando ou salve`;
+  }
+
+  function enquadrar(linha){
+    if(linha && linha.length>1) mapa.fitBounds(L.latLngBounds(linha), {padding:[40,40], maxZoom:17, paddingBottomRight:[40,200]});
+    else mapa.setView(VARGINHA, 14);
+  }
+
+  function textoData(ts){
+    if(!ts) return "";
+    const d = new Date(ts), hoje = new Date();
+    const hh = d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    const mesmoDia = d.toDateString()===hoje.toDateString();
+    return mesmoDia ? `hoje às ${hh}` : `em ${d.toLocaleDateString("pt-BR")} às ${hh}`;
+  }
+
+  // ---------- Modo Samuel ----------
+  async function entrarSamuel(){
+    modo = "samuel";
+    mostrar("telaMapa"); criarMapa(); setTimeout(()=>mapa.invalidateSize(),50);
+    $("painel").style.display = "block"; $("cartaoVisit").style.display = "none";
+    $("subtitulo").textContent = temNuvem ? "Modo Samuel · marque seu trajeto" : "Modo teste (sem nuvem ainda)";
+    try{
+      const t = await lerTrajeto();
+      if(t && t.pontos){
+        pontos = t.pontos; trechos = t.trechos || [];
+        $("obs").value = t.recado || "";
+        desenhar(linhaCompleta(), pontos); enquadrar(linhaCompleta());
+        $("subtitulo").textContent = "Último trajeto salvo " + textoData(t.salvoEm);
+      }
+    }catch(e){ aviso("Não consegui carregar o trajeto salvo"); }
+    atualizarDica();
+  }
+
+  // ---------- Modo visitante ----------
+  async function carregarVisitante(primeira){
+    try{
+      const t = await lerTrajeto();
+      if(t && t.pontos && t.pontos.length){
+        const linha = (t.trechos||[]).reduce((acc,tr)=>{ tr.forEach((p,i)=>{ if(i===0&&acc.length) return; acc.push(p); }); return acc; }, []);
+        desenhar(linha.length>1 ? linha : t.pontos, t.pontos);
+        if(primeira) enquadrar(linha.length>1 ? linha : t.pontos);
+        $("visitTitulo").textContent = t.recado ? t.recado : "Trajeto do Samuel";
+        $("visitInfo").textContent = "Atualizado " + textoData(t.salvoEm);
+        $("subtitulo").textContent = "A linha laranja é o caminho de hoje";
+        window._linhaVisit = linha.length>1 ? linha : t.pontos;
+      }else{
+        desenhar(null, []);
+        $("visitTitulo").textContent = "O Samuel ainda não marcou o trajeto";
+        $("visitInfo").textContent = "Volte daqui a pouco 🙂";
+        $("subtitulo").textContent = "Varginha · MG";
+      }
+    }catch(e){
+      $("visitTitulo").textContent = "Sem conexão com o servidor";
+      $("visitInfo").textContent = "Tentando de novo…";
+    }
+  }
+  function entrarVisitante(){
+    modo = "visitante";
+    mostrar("telaMapa"); criarMapa(); setTimeout(()=>mapa.invalidateSize(),50);
+    $("painel").style.display = "none"; $("cartaoVisit").style.display = "flex";
+    carregarVisitante(true);
+    clearInterval(timerVisit); timerVisit = setInterval(()=>carregarVisitante(false), 30000);
+  }
+
+  // ---------- Botões ----------
+  $("btnVisitante").onclick = entrarVisitante;
+  $("btnSamuel").onclick = () => { $("senha").value=""; $("erroSenha").textContent=""; $("modal").classList.add("ativa"); setTimeout(()=>$("senha").focus(),100); };
+  $("btnCancelar").onclick = () => $("modal").classList.remove("ativa");
+  async function tentarEntrar(){
+    const s = $("senha").value.trim();
+    if(!s){ $("erroSenha").textContent = "Digite a senha"; return; }
+    $("btnEntrar").textContent = "…";
+    const ok = await conferirSenha(s);
+    $("btnEntrar").textContent = "Entrar";
+    if(ok){ senhaDigitada = s; $("modal").classList.remove("ativa"); entrarSamuel(); }
+    else { $("erroSenha").textContent = "Senha errada"; $("senha").value=""; }
+  }
+  $("btnEntrar").onclick = tentarEntrar;
+  $("senha").addEventListener("keydown", e => { if(e.key==="Enter") tentarEntrar(); });
+
+  $("btnRuas").onclick = () => {
+    seguirRuas = !seguirRuas;
+    $("btnRuas").classList.toggle("ligado", seguirRuas);
+    $("btnRuas").textContent = seguirRuas ? "🛣️ Seguir ruas" : "✏️ Linha livre";
+    aviso(seguirRuas ? "A linha vai seguir as ruas" : "A linha vai em reta entre os pontos");
+  };
+  $("btnDesfazer").onclick = () => {
+    if(ocupado || !pontos.length) return;
+    pontos.pop(); if(trechos.length >= pontos.length && trechos.length) trechos.pop();
+    desenhar(linhaCompleta(), pontos); atualizarDica();
+  };
+  $("btnLimpar").onclick = () => {
+    if(ocupado) return;
+    pontos = []; trechos = []; desenhar(null, []); atualizarDica(); aviso("Trajeto apagado (salve para valer pros visitantes)");
+  };
+  $("btnSalvar").onclick = async () => {
+    if(ocupado) return;
+    const b = $("btnSalvar"); b.textContent = "Salvando…"; b.disabled = true;
+    try{
+      await salvarTrajeto({ pontos, trechos, recado: $("obs").value.trim(), salvoEm: Date.now() });
+      aviso(pontos.length ? "Pronto! Os visitantes já veem seu trajeto ✅" : "Trajeto apagado para os visitantes");
+      $("subtitulo").textContent = "Último trajeto salvo " + textoData(Date.now());
+    }catch(e){ aviso("Erro ao salvar. Confira a internet e tente de novo."); }
+    b.textContent = "Salvar trajeto para os visitantes"; b.disabled = false;
+  };
+  $("btnCentralizar").onclick = () => enquadrar(window._linhaVisit);
+  $("btnSair").onclick = () => {
+    clearInterval(timerVisit); modo = null; senhaDigitada = "";
+    pontos = []; trechos = []; if(mapa) desenhar(null, []);
+    mostrar("inicio");
+  };
+})();
+</script>
+</body>
+</html>
